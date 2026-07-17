@@ -150,6 +150,7 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel) {
     val carousels = if (gridSection != null) sections.drop(1) else sections
 
     LazyColumn(
+        contentPadding = PaddingValues(bottom = 130.dp),
         modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
@@ -165,7 +166,6 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel) {
         items(carousels.size) { i ->
             HomeFeedSection(navController, carousels[i])
         }
-        item { Spacer(modifier = Modifier.height(120.dp)) }
     }
 }
 

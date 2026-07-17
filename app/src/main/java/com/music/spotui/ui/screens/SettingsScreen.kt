@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -59,7 +60,6 @@ import com.music.spotui.data.preferences.setWifiQuality
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
@@ -94,12 +94,10 @@ fun SettingsScreen(navController: NavController) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 72.dp)
+                .padding(padding)
+                .consumeWindowInsets(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-                // Clear the bottom nav + mini player so the last section
-                // (crossfade / DJ mixing) isn't hidden under the bar.
-                .padding(bottom = 160.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             SectionTitle("Audio quality")
             QualityPicker(

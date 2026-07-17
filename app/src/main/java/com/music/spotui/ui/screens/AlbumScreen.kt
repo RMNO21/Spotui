@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -127,7 +128,6 @@ fun AlbumScreen(navController: NavController, albumName: String, artist: String 
     }
 
 }
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun SumUpAlbumScreen(
@@ -195,6 +195,7 @@ fun SumUpAlbumScreen(
 
     Log.d("color", dominentColor.toString())
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             CenterAlignedTopAppBar(
                 modifier = Modifier.padding(16.dp, 0.dp),
@@ -219,12 +220,14 @@ fun SumUpAlbumScreen(
                 }
             )
         }
-    ){
+    ) { innerPadding ->
 
 
         Column(modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
+            .consumeWindowInsets(innerPadding)
+            .padding(bottom = innerPadding.calculateBottomPadding())
             .verticalScroll(rememberScrollState())
         ) {
 

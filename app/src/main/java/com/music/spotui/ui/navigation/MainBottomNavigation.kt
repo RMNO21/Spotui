@@ -33,6 +33,8 @@ import com.music.spotui.ui.components.MiniPlayer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
+import androidx.compose.foundation.layout.navigationBarsPadding
+
 class NoRippleInteractionSource : MutableInteractionSource {
 
     override val interactions: Flow<Interaction> = emptyFlow()
@@ -59,7 +61,6 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                 contentAlignment = Alignment.BottomCenter,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
@@ -71,7 +72,7 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                     )
             ) {
 
-                Column {
+                Column(modifier = Modifier.navigationBarsPadding()) {
 
                     AnimatedVisibility(
                         visible = bottomBarPlayerState.value,

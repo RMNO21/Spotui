@@ -195,12 +195,12 @@ fun SumUpLibraryScreen(
         return
     }
     LazyColumn(
+        contentPadding = PaddingValues(top = 10.dp, bottom = 130.dp),
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
             .background(Color(0xFF0E0E13))
     ) {
-        item { Spacer(modifier = Modifier.height(10.dp)) }
         // Listening history & stats entry.
         item {
             Row(
@@ -291,7 +291,6 @@ fun SumUpLibraryScreen(
                 }
             }
         }
-        item { Spacer(modifier = Modifier.height(130.dp)) }
     }
 }
 

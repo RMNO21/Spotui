@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -68,7 +69,6 @@ import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.PlaylistViewModel
 
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun PlaylistScreen(navController: NavController, playlistId: String, playlistName: String = "") {
@@ -124,6 +124,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
         }
 
         Scaffold(
+            containerColor = Color.Transparent,
             topBar = {
                 CenterAlignedTopAppBar(
                     modifier = Modifier.padding(16.dp, 0.dp),
@@ -145,11 +146,13 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                     title = { Text(text = "") }
                 )
             }
-        ) {
+        ) { innerPadding ->
             LazyColumn(
+                contentPadding = innerPadding,
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color(AppBackground.toArgb()))
+                    .consumeWindowInsets(innerPadding)
             ) {
                 item {
                     Column(

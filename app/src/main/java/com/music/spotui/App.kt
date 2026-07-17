@@ -43,9 +43,7 @@ fun App() {
     }
 
     Scaffold(
-        modifier = Modifier
-            .navigationBarsPadding()
-        ,
+        modifier = Modifier,
         bottomBar = {
             MainBottomNavigation(navController = navController, bottomBarState = bottomBarState, bottomBarPlayerState)
         }

@@ -133,6 +133,7 @@ fun SumUpSearchScreen(
     }
 
     LazyColumn(
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 130.dp),
         modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
@@ -289,10 +290,6 @@ fun SumUpSearchScreen(
                     })
                 }
             }
-        }
-
-        item{
-            Spacer(modifier = Modifier.height(130.dp))
         }
 
     }
