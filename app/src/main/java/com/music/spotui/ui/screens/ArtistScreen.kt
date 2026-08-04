@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -138,6 +140,7 @@ private fun ArtistOverviewContent(
     }
 
     LazyColumn(
+        contentPadding = PaddingValues(bottom = 130.dp),
         modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
@@ -173,7 +176,8 @@ private fun ArtistOverviewContent(
                     contentDescription = "",
                     tint = Color.White,
                     modifier = Modifier
-                        .padding(16.dp, 40.dp)
+                        .statusBarsPadding()
+                        .padding(16.dp, 12.dp)
                         .size(26.dp)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -404,8 +408,6 @@ private fun ArtistOverviewContent(
                 }
             }
         }
-
-        item { Spacer(Modifier.height(120.dp)) }
     }
 }
 
@@ -608,6 +610,7 @@ fun ArtistReleasesScreen(navController: NavController, artistName: String) {
         }
 
         LazyColumn(
+            contentPadding = PaddingValues(bottom = 130.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(AppBackground.toArgb()))
@@ -617,7 +620,8 @@ fun ArtistReleasesScreen(navController: NavController, artistName: String) {
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp, 40.dp, 16.dp, 12.dp),
+                        .statusBarsPadding()
+                        .padding(16.dp, 12.dp, 16.dp, 12.dp),
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -684,7 +688,6 @@ fun ArtistReleasesScreen(navController: NavController, artistName: String) {
                     }
                 }
             }
-            item { Spacer(Modifier.height(120.dp)) }
         }
     }
 }

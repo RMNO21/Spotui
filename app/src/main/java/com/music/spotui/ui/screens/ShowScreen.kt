@@ -59,6 +59,7 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
     val episodes = (episodesState as? Response.Success)?.data.orEmpty()
 
     LazyColumn(
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 130.dp),
         modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))

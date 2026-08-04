@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,7 +62,6 @@ import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.PlayerViewModel
 
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun DownloadsScreen(navController: NavController) {
@@ -77,16 +77,16 @@ fun DownloadsScreen(navController: NavController) {
         mutableStateOf(com.music.spotui.di.SongPlayer.downloadingSnapshot())
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {
         while (true) {
             val snap = com.music.spotui.di.SongPlayer.downloadingSnapshot()
-            // A download leaving the snapshot means it finished → refresh the saved list.
             if (snap.size != inProgress.size) songs = getDownloadedSongs(context)
             inProgress = snap
             kotlinx.coroutines.delay(400)
         }
     }
 
-    var menuSong by remember { mutableStateOf<com.music.spotui.data.entity.SongsModel?>(null) }
+    var menuSong by remember { mutableStateOf<SongsModel?>(null) }
     menuSong?.let { sel ->
         com.music.spotui.ui.components.SongOptionsSheet(
             song = sel,
@@ -96,14 +96,13 @@ fun DownloadsScreen(navController: NavController) {
         )
     }
 
-    val accent = Color(0xFF1DB954)
-
     Surface(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
     ) {
         Scaffold(
+            containerColor = Color.Transparent,
             topBar = {
                 CenterAlignedTopAppBar(
                     modifier = Modifier.padding(16.dp, 0.dp),
@@ -125,11 +124,13 @@ fun DownloadsScreen(navController: NavController) {
                     title = { Text(text = "") }
                 )
             }
-        ) {
+        ) { innerPadding ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color(AppBackground.toArgb()))
+                    .consumeWindowInsets(innerPadding)
+                    .padding(bottom = innerPadding.calculateBottomPadding())
                     .verticalScroll(rememberScrollState())
             ) {
                 Column(

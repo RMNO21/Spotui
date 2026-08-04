@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -63,7 +64,6 @@ import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.AlbumViewModel
 
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
 @Composable
 fun LikedSongsScreen(
@@ -92,6 +92,7 @@ fun LikedSongsScreen(
 
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             CenterAlignedTopAppBar(
                 modifier = Modifier.padding(16.dp, 0.dp),
@@ -116,12 +117,14 @@ fun LikedSongsScreen(
                 }
             )
         }
-    ){
+    ) { innerPadding ->
 
 
         Column(modifier = Modifier
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
+            .consumeWindowInsets(innerPadding)
+            .padding(bottom = innerPadding.calculateBottomPadding())
             .verticalScroll(rememberScrollState())
         ) {
 

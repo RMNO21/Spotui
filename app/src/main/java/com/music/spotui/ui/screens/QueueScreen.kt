@@ -106,7 +106,12 @@ fun QueueScreen(navController: NavController) {
             Text("Queue", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 32.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+        ) {
             current?.let {
                 item {
                     Text(
@@ -116,7 +121,7 @@ fun QueueScreen(navController: NavController) {
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 6.dp)
                     )
-                    QueueRow(song = it, highlight = true, onClick = {})
+                    QueueRow(song = it, highlight = true, onClick = {}, isDragging = false, dragOffsetY = 0f)
                 }
             }
             if (upcoming.isNotEmpty()) {
@@ -149,52 +154,39 @@ fun QueueScreen(navController: NavController) {
                                     .background(Color(0xFF7A1F1F))
                                     .padding(horizontal = 24.dp),
                             ) {
-                                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.White)
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
                             }
                         },
-                        modifier = Modifier.graphicsLayer {
-                            translationY = if (isDragging) dragOffset else 0f
-                        },
-                    ) {
-                        QueueRow(
-                            song = song,
-                            highlight = false,
-                            onClick = {
-                                val idx = queue.indexOfFirst { it.id == song.id }
-                                playerViewModel.updateSongState(
-                                    song.coverUri, song.title, song.singer, true,
-                                    song.id, idx.coerceAtLeast(0), playerViewModel.currentSongAlbum.value
-                                )
-                                SongPlayer.playSong(song.url, context)
-                                navController.navigateUp()
-                            },
-                            dragHandle = Modifier.pointerInput(song.id) {
-                                detectDragGestures(
-                                    onDragStart = {
-                                        draggingId = song.id
-                                        dragOffset = 0f
-                                    },
-                                    onDragEnd = { draggingId = -1; dragOffset = 0f },
-                                    onDragCancel = { draggingId = -1; dragOffset = 0f },
-                                ) { change, dragAmount ->
-                                    change.consume()
-                                    dragOffset += dragAmount.y
-                                    // Crossed a full row height → swap with the neighbour.
+                        content = {
+                            QueueRow(
+                                song = song,
+                                highlight = false,
+                                isDragging = isDragging,
+                                dragOffsetY = if (isDragging) dragOffset else 0f,
+                                onClick = {
                                     val abs = queue.indexOfFirst { it.id == song.id }
-                                    if (dragOffset > rowHeightPx / 2 && upIdx < upcoming.size - 1) {
-                                        playerViewModel.moveQueueItem(abs, abs + 1)
-                                        dragOffset -= rowHeightPx
-                                    } else if (dragOffset < -rowHeightPx / 2 && upIdx > 0) {
-                                        playerViewModel.moveQueueItem(abs, abs - 1)
-                                        dragOffset += rowHeightPx
+                                    if (abs >= 0) playerViewModel.playSongAt(queue, abs, context)
+                                },
+                                onDragStart = { draggingId = song.id; dragOffset = 0f },
+                                onDragEnd = { draggingId = -1; dragOffset = 0f },
+                                onDragDelta = { dy ->
+                                    dragOffset += dy
+                                    val abs = queue.indexOfFirst { it.id == song.id }
+                                    if (abs >= 0) {
+                                        if (dragOffset > rowHeightPx / 2 && abs < queue.size - 1) {
+                                            playerViewModel.moveQueueItem(abs, abs + 1)
+                                            dragOffset -= rowHeightPx
+                                        } else if (dragOffset < -rowHeightPx / 2 && upIdx > 0) {
+                                            playerViewModel.moveQueueItem(abs, abs - 1)
+                                            dragOffset += rowHeightPx
+                                        }
                                     }
-                                }
-                            },
-                        )
-                    }
+                                },
+                            )
+                        }
+                    )
                 }
             }
-            item { Spacer(modifier = Modifier.height(120.dp)) }
         }
     }
 }
