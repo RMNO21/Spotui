@@ -56,6 +56,7 @@ import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import com.music.spotui.R
+import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.data.preferences.getDownloadedSongs
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.theme.AppBackground
@@ -68,6 +69,7 @@ fun DownloadsScreen(navController: NavController) {
 
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val context = LocalContext.current
+    val accent = AppPalette
 
     // Completed downloads (from prefs) + live in-progress ones (from SongPlayer). Poll
     // while the screen is open so a track appears here the moment its download starts,
@@ -77,7 +79,6 @@ fun DownloadsScreen(navController: NavController) {
         mutableStateOf(com.music.spotui.di.SongPlayer.downloadingSnapshot())
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-    LaunchedEffect(Unit) {
         while (true) {
             val snap = com.music.spotui.di.SongPlayer.downloadingSnapshot()
             if (snap.size != inProgress.size) songs = getDownloadedSongs(context)

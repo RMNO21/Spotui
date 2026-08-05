@@ -58,6 +58,13 @@ object SongPlayer {
     @Volatile var webPlayerEnabled = false
     @Volatile var youtubeEnabled = true
 
+    // ── Deezer ──
+    // When enabled and a Deezer account is logged in (ARL stored), playback tries
+    // Deezer FIRST (ISRC → Deezer track → encrypted CDN stream, decrypted on the
+    // fly by DeezerDataSource). Quality follows the account tier: free → MP3 128,
+    // Premium → MP3 320 / FLAC. Falls back to SpotiFLAC/YouTube on any miss.
+    @Volatile var deezerEnabled = true
+
     // Which engine is feeding the CURRENT track, for the on-screen source badge.
     // "Lossless" (SpotiFLAC: Tidal/Qobuz/Amazon) is NOT Spotify — surfaced so the
     // user knows real Spotify vs a lossless mirror vs the YouTube fallback.
@@ -285,6 +292,9 @@ object SongPlayer {
     private fun streamMimeType(streamUrl: String): String? {
         val bare = streamUrl.substringBefore('?').lowercase()
         return when {
+            streamUrl.startsWith("deezer://") ->
+                if (streamUrl.contains("fmt=flac")) androidx.media3.common.MimeTypes.AUDIO_FLAC
+                else androidx.media3.common.MimeTypes.AUDIO_MPEG
             streamUrl.startsWith("data:application/dash+xml") ||
                 bare.endsWith(".mpd") || streamUrl.contains("manifest.tidal.com") || streamUrl.contains("/manifests/") ->
                 androidx.media3.common.MimeTypes.APPLICATION_MPD
@@ -305,6 +315,9 @@ object SongPlayer {
         // one now + preloading a partial intro makes playback stop after ~30s when the
         // continuation hits a stale URL, so resolve those fresh at play time instead.
         if (losslessStreaming && com.music.spotui.data.preferences.currentStreamingQuality(appContext).lossless) return
+        // Deezer resolves a fresh CDN url per play; a YouTube prefetch cached under
+        // the same key would shadow it, so skip prefetch entirely when Deezer is on.
+        if (deezerEnabled && com.music.spotui.data.preferences.isDeezerEnabled(appContext)) return
         scope.launch {
             val url = runCatching { resolveStreamUrl(song, appContext) }.getOrNull()
             if (url != null) cacheIntro(url, appContext)
@@ -376,6 +389,16 @@ object SongPlayer {
     // prefetch resolving the NEXT track via YouTube was flipping the badge to
     // "YouTube" while the current track streamed from Spotify).
     private suspend fun resolveStreamUrl(song: String, appContext: Context, forPlayback: Boolean = false): String? {
+        // Imported local files: the play query IS the file's content:// / file:// URI.
+        // ExoPlayer plays it directly (FLAC/MP3/WAV/… via its built-in extractors).
+        if (song.startsWith("content://") || song.startsWith("file://")) {
+            if (forPlayback) {
+                currentSource = "Local file"
+                currentQuality = song.substringBefore('?').substringAfterLast('.', "")
+                    .uppercase().takeIf { it.length in 2..5 }.orEmpty()
+            }
+            return song
+        }
         alternativeStreamForPlayback(song, appContext)?.let { alt ->
             invalidateResolvedStream(song)
             return when {
@@ -423,41 +446,64 @@ object SongPlayer {
         }
         // Quality for the current network (Wi-Fi vs cellular), from Settings.
         val quality = com.music.spotui.data.preferences.currentStreamingQuality(appContext)
-        // FLAC providers are slow community proxies. Only try them when the user
-        // explicitly picked Lossless; normal/high quality should stream YouTube
-        // immediately.
-        // Only attempt lossless when a SpotiFLAC server is actually up (status is
-        // cached ~60s), so playback isn't delayed probing dead servers — it goes
-        // straight to YouTube instead.
-        if (losslessStreaming && quality.lossless && com.metrolist.spotify.SpotiFlac.anyLosslessServerUp()) {
-            (trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song))?.let { spotifyId ->
-                val r = kotlinx.coroutines.withTimeoutOrNull(8_000) {
-                    com.metrolist.spotify.SpotiFlac.resolve(
-                        spotifyId,
-                        isrc = null,
-                        preferHiRes = losslessHiRes,
-                    )
+
+        // Deezer — preferred, but when Lossless is selected a FREE Deezer account only
+        // yields MP3. In that case we HOLD the MP3 as a fallback and try the real FLAC
+        // sources first, so lossless isn't silently pre-empted by Deezer MP3.
+        var heldDeezer: com.music.spotui.deezer.DeezerSource.Result.Success? = null
+        if (deezerEnabled && com.music.spotui.data.preferences.isDeezerEnabled(appContext)) {
+            val spotifyId = trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)
+            val r = kotlinx.coroutines.withTimeoutOrNull(12_000) {
+                com.music.spotui.deezer.DeezerSource.resolve(
+                    appContext, spotifyId = spotifyId, isrc = null, searchQuery = searchTextForPlayback(song),
+                )
+            }
+            if (r is com.music.spotui.deezer.DeezerSource.Result.Success) {
+                if (r.mimeFlac || !quality.lossless) {
+                    Log.d(TAG, "deezer ${r.qualityLabel} for: $song")
+                    if (forPlayback) { currentSource = "Deezer"; currentQuality = r.qualityLabel }
+                    streamCache[song] = r.uri
+                    sourceCache[song] = "Deezer"
+                    qualityCache[song] = r.qualityLabel
+                    return r.uri
                 }
-                when (r) {
-                    is com.metrolist.spotify.SpotiFlac.Result.Success -> {
-                        Log.d(TAG, "lossless ${r.track.provider} ${r.track.quality}-bit for: $song")
-                        val flacQuality = "FLAC ${r.track.quality}-bit"
-                        // SpotiFLAC pulls from Tidal/Qobuz/Amazon — not Spotify.
-                        if (forPlayback) {
-                            currentSource = "Lossless • ${r.track.provider}"
-                            currentQuality = flacQuality
-                        }
-                        streamCache[song] = r.track.url
-                        sourceCache[song] = "Lossless • ${r.track.provider}"
-                        qualityCache[song] = flacQuality
-                        return r.track.url
+                heldDeezer = r // Deezer MP3, but Lossless requested — try FLAC first.
+                Log.d(TAG, "deezer only MP3; trying FLAC first for: $song")
+            } else {
+                Log.d(TAG, "deezer miss ($r), continuing for: $song")
+            }
+        }
+
+        // Lossless FLAC: SpotiFLAC gated (if verified) + Tidal/community, ISRC-matched.
+        if (losslessStreaming && quality.lossless) {
+            (trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song))?.let { spotifyId ->
+                val r = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                    com.music.spotui.lossless.LosslessSource.resolve(appContext, spotifyId, preferHiRes = losslessHiRes)
+                }
+                if (r is com.music.spotui.lossless.LosslessSource.Result.Success) {
+                    val flacQuality = "FLAC ${r.track.quality}-bit"
+                    if (forPlayback) {
+                        currentSource = "Lossless • ${r.track.provider}"
+                        currentQuality = flacQuality
                     }
-                    is com.metrolist.spotify.SpotiFlac.Result.Cooldown ->
-                        Log.d(TAG, "lossless on cooldown, using YouTube for: $song")
-                    null -> Log.w(TAG, "lossless timed out, using YouTube for: $song")
-                    else -> Log.w(TAG, "lossless miss ($r), using YouTube for: $song")
+                    streamCache[song] = r.track.url
+                    sourceCache[song] = "Lossless • ${r.track.provider}"
+                    qualityCache[song] = flacQuality
+                    return r.track.url
+                } else {
+                    Log.d(TAG, "lossless miss ($r) for: $song")
                 }
             }
+        }
+
+        // Deezer MP3 fallback (held above) before dropping to YouTube.
+        heldDeezer?.let { r ->
+            Log.d(TAG, "using Deezer MP3 fallback for: $song")
+            if (forPlayback) { currentSource = "Deezer"; currentQuality = r.qualityLabel }
+            streamCache[song] = r.uri
+            sourceCache[song] = "Deezer"
+            qualityCache[song] = r.qualityLabel
+            return r.uri
         }
         if (!youtubeEnabled) {
             Log.w(TAG, "YouTube fallback disabled — no stream for: $song")
@@ -676,18 +722,41 @@ object SongPlayer {
         appContext: Context,
     ): Boolean {
         val dlQuality = com.music.spotui.data.preferences.getDownloadQuality(appContext)
-        // Prefer a true lossless FLAC download (SpotiFLAC) when the download quality is
-        // Lossless and we have a Spotify id, but bound it with a timeout — the community
-        // proxies are often slow/on-cooldown and must NOT stall the whole download. On any
-        // miss/timeout fall back to the YouTube m4a path at the chosen quality.
-        if (song.spotifyTrackId.isNotBlank()) {
-            val flacOk = kotlinx.coroutines.withTimeoutOrNull(30_000) {
-                runCatching { downloadFlacToFile(song, appContext) }.getOrDefault(false)
-            } ?: false
-            if (flacOk) return true
+        // Deezer: use immediately if it yields FLAC (HiFi). If it only yields MP3
+        // (free account), HOLD it and try the real FLAC sources first — otherwise a
+        // free Deezer MP3 would pre-empt lossless.
+        var heldDeezer: com.music.spotui.deezer.DeezerSource.Resolved? = null
+        if (deezerEnabled && com.music.spotui.data.preferences.isDeezerEnabled(appContext)) {
+            val raw = kotlinx.coroutines.withTimeoutOrNull(30_000) { resolveDeezerRaw(song, appContext) }
+            if (raw != null) {
+                if (raw.isFlac) {
+                    if (downloadDeezerRaw(song, appContext, raw)) return true
+                } else {
+                    heldDeezer = raw
+                }
+            }
         }
+        // Lossless FLAC: SpotiFLAC gated (if verified) + Tidal/community. Saves .flac.
+        if (losslessStreaming && song.spotifyTrackId.isNotBlank()) {
+            val r = kotlinx.coroutines.withTimeoutOrNull(45_000) {
+                com.music.spotui.lossless.LosslessSource.resolve(appContext, song.spotifyTrackId, preferHiRes = losslessHiRes)
+            }
+            if (r is com.music.spotui.lossless.LosslessSource.Result.Success) {
+                val dir = java.io.File(appContext.filesDir, "downloads").apply { mkdirs() }
+                val outFile = java.io.File(dir, "${song.id}.flac")
+                val tmpFile = java.io.File(dir, "${song.id}.flacpart")
+                if (httpDownloadRanged(r.track.url, tmpFile, song.url) && tmpFile.renameTo(outFile)) {
+                    com.music.spotui.data.preferences.addDownload(appContext, song, outFile.absolutePath)
+                    Log.d(TAG, "lossless downloaded (${r.track.provider} ${r.track.quality}-bit): ${song.title}")
+                    return true
+                }
+                runCatching { tmpFile.delete() }
+            }
+        }
+        // Deezer MP3 fallback (held above) before dropping to a YouTube m4a.
+        heldDeezer?.let { if (downloadDeezerRaw(song, appContext, it)) return true }
         if (!youtubeEnabled) {
-            lastDownloadError = "Track not available on lossless providers"
+            lastDownloadError = "Track not available for download"
             return false
         }
 
@@ -716,53 +785,118 @@ object SongPlayer {
         return true
     }
 
+    // (Removed downloadFlacToFile — the SpotiFLAC community-proxy FLAC downloader.
+    // Those servers are dead and it never produced a file; real FLAC now comes from
+    // the Deezer downloader below.)
+
     /**
-     * Download a true lossless FLAC via SpotiFLAC. Resolves the track's ISRC first
-     * (improves Qobuz matching), asks SpotiFLAC for a FLAC URL, and saves it as
-     * `<id>.flac`. Returns false on any miss/cooldown so the caller can fall back.
+     * Download a Deezer track and decrypt it to a real audio file. Resolves the
+     * stream (ISRC → Deezer, account-tier quality), streams the Blowfish-encrypted
+     * CDN bytes and decrypts every 3rd 2048-byte block on the way to `<id>.flac` /
+     * `<id>.mp3`. Returns false on any miss so the caller can fall back.
      */
-    private suspend fun downloadFlacToFile(
+    private suspend fun resolveDeezerRaw(
         song: com.music.spotui.data.entity.SongsModel,
         appContext: Context,
-    ): Boolean {
-        val isrc = runCatching {
-            com.metrolist.spotify.Spotify.track(song.spotifyTrackId).getOrNull()?.isrc
-        }.getOrNull()
-        val flac = when (
-            val r = com.metrolist.spotify.SpotiFlac.resolve(
-                song.spotifyTrackId, isrc, preferHiRes = losslessHiRes,
-            )
-        ) {
-            is com.metrolist.spotify.SpotiFlac.Result.Success -> r.track
-            is com.metrolist.spotify.SpotiFlac.Result.Cooldown -> {
-                Log.w(TAG, "FLAC download on cooldown for ${song.title}: ${r.message}")
-                return false
-            }
-            else -> return false
-        }
+    ): com.music.spotui.deezer.DeezerSource.Resolved? =
+        com.music.spotui.deezer.DeezerSource.resolveRaw(
+            appContext,
+            spotifyId = song.spotifyTrackId.takeIf { it.isNotBlank() },
+            isrc = null,
+            searchQuery = listOf(song.title, song.singer).filter { it.isNotBlank() }.joinToString(" "),
+        )
 
+    private fun downloadDeezerRaw(
+        song: com.music.spotui.data.entity.SongsModel,
+        appContext: Context,
+        raw: com.music.spotui.deezer.DeezerSource.Resolved,
+    ): Boolean {
+        val ext = if (raw.isFlac) "flac" else "mp3"
         val dir = java.io.File(appContext.filesDir, "downloads").apply { mkdirs() }
-        val outFile = java.io.File(dir, "${song.id}.flac")
-        val tmpFile = java.io.File(dir, "${song.id}.flacpart")
-        // TIDAL lossless is segmented DASH — remux the segments into a real .flac;
-        // single-file providers (Qobuz) download directly.
-        val ok = if (flac.container == "dash") {
-            com.metrolist.spotify.SpotiFlac.downloadDashFlacToFile(flac.url, tmpFile)
-        } else {
-            httpDownloadRanged(flac.url, tmpFile, song.url)
-        }
-        if (!ok) {
-            Log.e(TAG, "FLAC download failed for ${song.title}: $lastDownloadError")
+        val outFile = java.io.File(dir, "${song.id}.$ext")
+        val tmpFile = java.io.File(dir, "${song.id}.dzpart")
+        if (!deezerDownloadDecrypted(raw.url, raw.encrypted, raw.trackId, tmpFile, song.url)) {
             runCatching { tmpFile.delete() }
             return false
         }
         if (!tmpFile.renameTo(outFile)) {
+            lastDownloadError = "Couldn't save file"
             runCatching { tmpFile.delete() }
             return false
         }
         com.music.spotui.data.preferences.addDownload(appContext, song, outFile.absolutePath)
-        Log.d(TAG, "FLAC downloaded (${flac.provider} ${flac.quality}-bit): ${song.title}")
+        Log.d(TAG, "Deezer downloaded (${raw.qualityLabel}): ${song.title}")
         return true
+    }
+
+    /**
+     * Stream [url] and, if [encrypted], Blowfish-decrypt every 3rd 2048-byte block
+     * (Deezer's stripe cipher) while writing to [tmpFile], reporting progress for
+     * [query]. Produces a plain, fully-decrypted audio file.
+     */
+    private fun deezerDownloadDecrypted(
+        url: String,
+        encrypted: Boolean,
+        trackId: String,
+        tmpFile: java.io.File,
+        query: String,
+    ): Boolean {
+        downloadProgress[query] = 0
+        val conn = openDownloadConn(url)
+        return try {
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                lastDownloadError = "Deezer CDN HTTP $code"
+                return false
+            }
+            val total = conn.contentLengthLong
+            val cipher = if (encrypted) {
+                com.music.spotui.deezer.DeezerCrypto.cipher(
+                    com.music.spotui.deezer.DeezerCrypto.trackKey(trackId),
+                )
+            } else {
+                null
+            }
+            java.io.BufferedOutputStream(tmpFile.outputStream()).use { output ->
+                conn.inputStream.use { input ->
+                    val buf = ByteArray(2048)
+                    var counter = 0
+                    var position = 0L
+                    while (true) {
+                        var read = 0
+                        while (read < 2048) {
+                            val r = input.read(buf, read, 2048 - read)
+                            if (r < 0) break
+                            read += r
+                        }
+                        if (read == 0) break
+                        val out = if (encrypted && read == 2048 && counter % 3 == 0) {
+                            cipher!!.doFinal(buf)
+                        } else {
+                            buf
+                        }
+                        output.write(out, 0, read)
+                        counter++
+                        position += read
+                        if (total > 0) {
+                            val pct = ((position * 100) / total).toInt().coerceIn(0, 100)
+                            if (downloadProgress[query] != pct) {
+                                downloadProgress[query] = pct
+                                onDownloadsChanged?.invoke()
+                            }
+                        }
+                        if (read < 2048) break // final partial chunk
+                    }
+                }
+            }
+            downloadProgress[query] = 100
+            true
+        } catch (e: Exception) {
+            lastDownloadError = e.message ?: "Deezer download error"
+            false
+        } finally {
+            runCatching { conn.disconnect() }
+        }
     }
 
     private data class CandidateScore(
@@ -1191,7 +1325,11 @@ object SongPlayer {
         }
         val p = ExoPlayer.Builder(context)
             .setMediaSourceFactory(
-                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory(context)),
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                    // Routes deezer:// URIs to the decrypting DeezerDataSource and
+                    // everything else through the normal cached HTTP stack.
+                    com.music.spotui.deezer.DeezerAwareDataSourceFactory(cacheDataSourceFactory(context)),
+                ),
             )
             .setRenderersFactory(renderers)
             .setAudioAttributes(buildAudioAttributes(), handleAudioFocus)

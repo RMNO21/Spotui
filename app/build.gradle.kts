@@ -15,8 +15,8 @@ android {
         applicationId = "com.music.spotui"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "1.3"
+        versionCode = 14
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -109,6 +109,9 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.3.1")
     // media session + system media notification (lock screen / notification center)
     implementation("androidx.media3:media3-session:1.3.1")
+
+    //Storage Access Framework folder enumeration (local music import)
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     //okhttp + timber (used by the ported YouTube streaming flow)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

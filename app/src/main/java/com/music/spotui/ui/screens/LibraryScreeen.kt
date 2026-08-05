@@ -228,6 +228,38 @@ fun SumUpLibraryScreen(
                 }
             }
         }
+        // Local files (imported device audio) entry.
+        item {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp, 6.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { navController.navigate(Routes.LocalFiles.route) }
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(55.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF3B5BA5)),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_library_big),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(text = "Local files", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Music imported from this device", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
         items(entries) { entry ->
             Row(
                 horizontalArrangement = Arrangement.Start,

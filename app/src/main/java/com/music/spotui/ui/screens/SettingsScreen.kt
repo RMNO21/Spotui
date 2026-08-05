@@ -70,6 +70,10 @@ fun SettingsScreen(navController: NavController) {
     var dlQ by remember { mutableStateOf(getDownloadQuality(context)) }
     var crossfadeMs by remember { mutableStateOf(getCrossfadeMs(context).toFloat()) }
     var videoFallback by remember { mutableStateOf(isVideoFallbackEnabled(context)) }
+    // Read fresh each composition so returning from the Deezer login reflects it.
+    val deezerConnected = com.music.spotui.data.preferences.getDeezerArl(context) != null
+    val deezerTier = com.music.spotui.data.preferences.getDeezerTier(context)
+    var deezerEnabled by remember { mutableStateOf(com.music.spotui.data.preferences.isDeezerEnabled(context)) }
 
     Scaffold(
         containerColor = AppBackground,
@@ -115,19 +119,15 @@ fun SettingsScreen(navController: NavController) {
                 selected = dlQ,
             ) { dlQ = it; setDownloadQuality(context, it) }
 
-            // Live lossless-server status (spotbye). Lossless only resolves when a
-            // server is up; otherwise playback goes straight to YouTube.
-            var losslessStatus by remember { mutableStateOf("Lossless servers: checking…") }
-            LaunchedEffect(Unit) {
-                val up = runCatching { com.metrolist.spotify.SpotiFlac.upLosslessProviders() }.getOrNull()
-                losslessStatus = when {
-                    up == null -> "Lossless servers: status unavailable"
-                    up.isEmpty() -> "Lossless servers: 0/3 up — streaming (YouTube)"
-                    else -> "Lossless servers: ${up.size}/3 up (${up.sorted().joinToString(", ")})"
-                }
+            // Lossless FLAC comes from the Tidal community backend (no login) and, if
+            // connected, Deezer HiFi. Falls back to best-quality YouTube on a miss.
+            val losslessNote = if (deezerConnected) {
+                "Lossless: Tidal (free) + Deezer${if (deezerTier.isNotBlank()) " $deezerTier" else ""} — real FLAC"
+            } else {
+                "Lossless: Tidal community FLAC (no login needed) — or add Deezer HiFi below"
             }
             Text(
-                losslessStatus,
+                losslessNote,
                 color = Color(0xFFB3B3B3),
                 fontSize = 12.sp,
                 modifier = Modifier.padding(start = 4.dp, top = 6.dp),
@@ -175,6 +175,88 @@ fun SettingsScreen(navController: NavController) {
                     inactiveTrackColor = Color(0xFF333333),
                 ),
             )
+            Spacer(Modifier.height(12.dp))
+            SectionTitle("Deezer")
+            SettingsSwitchRow(
+                title = "Use Deezer",
+                subtitle = "Stream from Deezer first, fall back to YouTube",
+                checked = deezerEnabled,
+            ) {
+                deezerEnabled = it
+                com.music.spotui.data.preferences.setDeezerEnabled(context, it)
+                com.music.spotui.di.SongPlayer.deezerEnabled = it
+            }
+            Text(
+                text = if (deezerConnected) {
+                    "Connected" + if (deezerTier.isNotBlank()) " — $deezerTier" else ""
+                } else "Not connected",
+                color = Color(0xFFB3B3B3),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+            )
+            Text(
+                text = if (deezerConnected) "Reconnect / switch account" else "Log in to Deezer",
+                color = AppPalette,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        navController.navigate(com.music.spotui.ui.navigation.Routes.DeezerLogin.route)
+                    }
+                    .padding(vertical = 14.dp),
+            )
+            if (deezerConnected) {
+                Text(
+                    text = "Disconnect Deezer",
+                    color = Color(0xFFE57373),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            com.music.spotui.data.preferences.clearDeezer(context)
+                            navController.navigate(com.music.spotui.ui.navigation.Routes.Settings.route) {
+                                popUpTo(com.music.spotui.ui.navigation.Routes.Settings.route) { inclusive = true }
+                            }
+                        }
+                        .padding(vertical = 12.dp),
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+            SectionTitle("SpotiFLAC (experimental)")
+            val sfConnected = com.music.spotui.data.preferences.hasSpotiflacSession(context)
+            Text(
+                text = "Gives access to SpotiFLAC's own FLAC servers. You solve one quick check yourself — no auto-bypass. Experimental: may fail if their servers change.",
+                color = Color(0xFFB3B3B3),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 6.dp),
+            )
+            Text(
+                text = if (sfConnected) "Re-verify SpotiFLAC" else "Set up SpotiFLAC verification",
+                color = AppPalette,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        navController.navigate(com.music.spotui.ui.navigation.Routes.SpotiflacVerify.route)
+                    }
+                    .padding(vertical = 14.dp),
+            )
+            if (sfConnected) {
+                Text(
+                    text = "Session active ✓",
+                    color = Color(0xFF00C7B7),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
+
             Spacer(Modifier.height(12.dp))
             SectionTitle("Account")
             Text(

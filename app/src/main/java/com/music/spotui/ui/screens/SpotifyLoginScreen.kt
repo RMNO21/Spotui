@@ -105,7 +105,11 @@ fun SpotifyLoginScreen(navController: NavController) {
         // The hidden playback WebView was created (logged out) before this login —
         // reload it with the new session so playback doesn't show Spotify's "Oops".
         com.music.spotui.di.SpotifyWebPlayer.refreshLogin(context)
-        navController.navigate(Routes.Home.route) {
+        // First-time users land on the Deezer promo (better/uncensored/faster audio);
+        // returning users who already connected Deezer go straight Home.
+        val dest = if (com.music.spotui.data.preferences.getDeezerArl(context) != null)
+            Routes.Home.route else Routes.DeezerIntro.route
+        navController.navigate(dest) {
             popUpTo(Routes.Login.route) { inclusive = true }
         }
     }

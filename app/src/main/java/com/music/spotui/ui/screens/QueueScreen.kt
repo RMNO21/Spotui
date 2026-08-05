@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -197,14 +199,19 @@ private fun QueueRow(
     song: com.music.spotui.data.entity.SongsModel,
     highlight: Boolean,
     onClick: () -> Unit,
-    dragHandle: Modifier? = null,
+    isDragging: Boolean = false,
+    dragOffsetY: Float = 0f,
+    onDragStart: () -> Unit = {},
+    onDragEnd: () -> Unit = {},
+    onDragDelta: (Float) -> Unit = {},
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF121212))
+            .graphicsLayer { translationY = dragOffsetY }
+            .background(Color(if (isDragging) 0xFF1E1E24 else 0xFF121212))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -239,14 +246,24 @@ private fun QueueRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (!highlight && dragHandle != null) {
+        if (!highlight) {
             Icon(
                 imageVector = Icons.Default.Menu,
                 contentDescription = "Reorder",
                 tint = Color(0xFFB3B3B3),
                 modifier = Modifier
                     .size(28.dp)
-                    .then(dragHandle)
+                    .pointerInput(song.id) {
+                        detectDragGestures(
+                            onDragStart = { onDragStart() },
+                            onDragEnd = { onDragEnd() },
+                            onDragCancel = { onDragEnd() },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                onDragDelta(dragAmount.y)
+                            },
+                        )
+                    }
             )
         }
     }
