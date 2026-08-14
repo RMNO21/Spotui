@@ -57,8 +57,8 @@ fun MyNavHost(
 //    player = ExoPlayer.Builder(context).build()
 
     val context = LocalContext.current
-    // First launch (no Spotify session) lands on the login screen.
-    val startDestination = if (SpotifySession.spDc(context).isBlank()) {
+    // First launch (no Spotify session) lands on login if online, or Home (Offline Mode) if offline.
+    val startDestination = if (SpotifySession.spDc(context).isBlank() && com.music.spotui.data.api.NetworkMonitor.isOnline(context)) {
         Routes.Login.route
     } else {
         Routes.Home.route

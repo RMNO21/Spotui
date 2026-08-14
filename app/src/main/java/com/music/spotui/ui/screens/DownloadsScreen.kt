@@ -112,7 +112,11 @@ fun DownloadsScreen(navController: NavController) {
                             modifier = Modifier.clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { navController.navigateUp() },
+                            ) {
+                                if (!navController.navigateUp()) {
+                                    navController.navigate(com.music.spotui.ui.navigation.Routes.Home.route)
+                                }
+                            },
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "",
                             tint = Color.White

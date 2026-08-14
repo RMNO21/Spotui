@@ -52,6 +52,9 @@ class HomeViewModel @Inject constructor(private val repository: AppRepository)  
         }
     }
 
-
-
+    fun refresh() {
+        fetchHome()
+        fetchArtists()
+        fetchAlbums()
+    }
 }

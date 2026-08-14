@@ -161,12 +161,32 @@ fun LibraryScreen(navController: NavController) {
         }
 
         val followedArtists by libraryViewModel.followedArtists.collectAsState()
-        when (entries) {
-            is Response.Loading -> LibrarySkeleton(PaddingValues(0.dp))
-            is Response.Success ->
-                if (gridView) LibraryGridScreen(PaddingValues(0.dp), (entries as Response.Success).data, followedArtists, navController)
-                else SumUpLibraryScreen(PaddingValues(0.dp), (entries as Response.Success).data, followedArtists, navController)
-            else -> Box(modifier = Modifier.padding(20.dp, 100.dp)) { Snackbar(showMessage = "Couldn't load your library") }
+        val defaultOfflineEntries = listOf(
+            com.music.spotui.data.entity.LibraryEntry(
+                spotifyId = Api.HomeCache.LIKED_SONGS_ID,
+                name = "Liked Songs",
+                subtitle = "Playlist • Liked songs",
+                coverUri = "https://misc.scdn.co/liked-songs/liked-songs-640.png",
+                isPlaylist = true,
+            ),
+            com.music.spotui.data.entity.LibraryEntry(
+                spotifyId = Api.HomeCache.DOWNLOADS_ID,
+                name = "Downloaded",
+                subtitle = "Available offline",
+                coverUri = "",
+                isPlaylist = true,
+            )
+        )
+        val libraryEntries = (entries as? Response.Success)?.data ?: defaultOfflineEntries
+
+        when {
+            entries is Response.Loading && libraryEntries.size <= 2 && !com.music.spotui.data.api.NetworkMonitor.isOnline(context) ->
+                if (gridView) LibraryGridScreen(PaddingValues(0.dp), defaultOfflineEntries, followedArtists, navController)
+                else SumUpLibraryScreen(PaddingValues(0.dp), defaultOfflineEntries, followedArtists, navController)
+            entries is Response.Loading && libraryEntries.size <= 2 -> LibrarySkeleton(PaddingValues(0.dp))
+            else ->
+                if (gridView) LibraryGridScreen(PaddingValues(0.dp), libraryEntries, followedArtists, navController)
+                else SumUpLibraryScreen(PaddingValues(0.dp), libraryEntries, followedArtists, navController)
         }
     }
 }

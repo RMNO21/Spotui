@@ -31,6 +31,10 @@ object SpotifyTokenProvider {
             Log.w(TAG, "No sp_dc cookie set — Spotify data unavailable")
             return@withLock false
         }
+        if (!NetworkMonitor.isOnline(context)) {
+            Log.d(TAG, "Device is offline — skipping network token refresh")
+            return@withLock false
+        }
         SpotifyAuth.fetchAccessToken(spDc).fold(
             onSuccess = { token ->
                 Spotify.accessToken = token.accessToken

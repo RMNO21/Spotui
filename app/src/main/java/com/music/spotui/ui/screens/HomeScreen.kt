@@ -26,8 +26,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -115,15 +118,212 @@ fun HomeScreen(navController: NavController){
             }
 
             else -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "Couldn't load music.\nCheck your connection and try again.",
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+                OfflineHomeScreen(
+                    navController = navController,
+                    onRetry = { homeViewModel.refresh() },
+                )
             }
         }
+    }
+}
+
+@Composable
+fun OfflineHomeScreen(navController: NavController, onRetry: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val downloadedSongs = remember { com.music.spotui.data.preferences.getDownloadedSongs(context) }
+    val localSongs = remember { com.music.spotui.data.preferences.getLocalSongs(context) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Status badge
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(Color(0xFF2A2A2A))
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_download),
+                contentDescription = null,
+                tint = Color(0xFF1ED760),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "Offline Mode",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Listen to your music offline",
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            text = "You don't need an internet connection to play your downloaded playlists or local files.",
+            color = Color.LightGray,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Card 1: Downloaded Songs
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF181822))
+                .clickable { navController.navigate(Routes.Downloads.route) }
+                .padding(16.dp)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF1ED760).copy(alpha = 0.2f))
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_download),
+                    contentDescription = null,
+                    tint = Color(0xFF1ED760),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Downloaded Songs",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${downloadedSongs.size} songs ready to play",
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Card 2: Local Files
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF181822))
+                .clickable { navController.navigate(Routes.LocalFiles.route) }
+                .padding(16.dp)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF3B5BA5).copy(alpha = 0.25f))
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_library_big),
+                    contentDescription = null,
+                    tint = Color(0xFF7295E8),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Local Files",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${localSongs.size} device tracks imported",
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Card 3: Library
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF181822))
+                .clickable { navController.navigate(Routes.Library.route) }
+                .padding(16.dp)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF8B5CF6).copy(alpha = 0.25f))
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_library_big),
+                    contentDescription = null,
+                    tint = Color(0xFFA78BFA),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Your Library",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "View saved playlists and albums",
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // Retry Button
+        Button(
+            onClick = onRetry,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF282828),
+                contentColor = Color.White
+            ),
+            shape = RoundedCornerShape(50),
+            modifier = Modifier.height(44.dp)
+        ) {
+            Text("Retry Connection", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+
+        Spacer(modifier = Modifier.height(120.dp))
     }
 }
 

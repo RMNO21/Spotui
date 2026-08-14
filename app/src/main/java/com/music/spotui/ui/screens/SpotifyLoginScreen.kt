@@ -8,6 +8,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -173,9 +174,14 @@ fun SpotifyLoginScreen(navController: NavController) {
             },
         )
 
-        // Slim top bar: title, or the "Signing in…" status once the cookie lands.
+        // Top bar: title/status and Offline Mode shortcut.
         Box(
-            modifier = Modifier.fillMaxWidth().statusBarsPadding().height(40.dp).background(Color.Black),
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(48.dp)
+                .background(Color.Black)
+                .padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -183,6 +189,20 @@ fun SpotifyLoginScreen(navController: NavController) {
                 color = if (hasError) Color(0xFFE22134) else Color.White,
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp,
+            )
+            Text(
+                text = "Offline Mode",
+                color = Color(0xFF1ED760),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .clickable {
+                        navController.navigate(Routes.Home.route) {
+                            popUpTo(Routes.Login.route) { inclusive = true }
+                        }
+                    }
+                    .padding(4.dp),
             )
         }
     }

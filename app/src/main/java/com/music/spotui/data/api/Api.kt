@@ -16,6 +16,7 @@ import com.music.spotui.data.entity.HomeFeedModel
 import com.music.spotui.data.entity.HomeItem
 import com.music.spotui.data.entity.HomeSection
 import com.music.spotui.data.entity.SearchResults
+import com.music.spotui.data.cache.OfflineCache
 import com.music.spotui.data.entity.SongsModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -95,20 +96,43 @@ class Api @Inject constructor(
     )
 
     suspend fun getAlbums(): Flow<Response<List<AlbumsModel>>> = flow {
-        HomeCache.albums?.let { emit(Response.Success(it)) } ?: emit(Response.Loading())
+        val cached = HomeCache.albums ?: OfflineCache.loadAlbums(context)
+        if (cached != null) {
+            HomeCache.albums = cached
+            emit(Response.Success(cached))
+        } else {
+            emit(Response.Loading())
+        }
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            if (HomeCache.albums == null) emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
+            if (HomeCache.albums == null) {
+                val diskCached = OfflineCache.loadAlbums(context)
+                if (diskCached != null) {
+                    HomeCache.albums = diskCached
+                    emit(Response.Success(diskCached))
+                } else {
+                    emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
+                }
+            }
             return@flow
         }
         Spotify.newReleases(limit = 20).fold(
             onSuccess = { resp ->
                 val list = resp.albums?.items.orEmpty().map { it.toAlbumModel() }
                 HomeCache.albums = list
+                OfflineCache.saveAlbums(context, list)
                 emit(Response.Success(list))
             },
             onFailure = {
                 Log.e("Api", "getAlbums failed", it)
-                if (HomeCache.albums == null) emit(Response.Error(it.message ?: "error"))
+                if (HomeCache.albums == null) {
+                    val diskCached = OfflineCache.loadAlbums(context)
+                    if (diskCached != null) {
+                        HomeCache.albums = diskCached
+                        emit(Response.Success(diskCached))
+                    } else {
+                        emit(Response.Error(it.message ?: "error"))
+                    }
+                }
             },
         )
     }
@@ -157,9 +181,23 @@ class Api @Inject constructor(
      * etc. Process-cached like the other home feeds for instant re-entry.
      */
     suspend fun getHomeFeed(): Flow<Response<HomeFeedModel>> = flow {
-        HomeCache.home?.let { emit(Response.Success(it)) } ?: emit(Response.Loading())
+        val cached = HomeCache.home ?: OfflineCache.loadHomeFeed(context)
+        if (cached != null) {
+            HomeCache.home = cached
+            emit(Response.Success(cached))
+        } else {
+            emit(Response.Loading())
+        }
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            if (HomeCache.home == null) emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
+            if (HomeCache.home == null) {
+                val diskCached = OfflineCache.loadHomeFeed(context)
+                if (diskCached != null) {
+                    HomeCache.home = diskCached
+                    emit(Response.Success(diskCached))
+                } else {
+                    emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
+                }
+            }
             return@flow
         }
         Spotify.home(sectionItemsLimit = 20).fold(
@@ -177,11 +215,20 @@ class Api @Inject constructor(
                 }.distinctBy { it.title.lowercase().ifBlank { it.hashCode().toString() } }
                 val model = HomeFeedModel(greeting = feed.greeting ?: "", sections = sections)
                 HomeCache.home = model
+                OfflineCache.saveHomeFeed(context, model)
                 emit(Response.Success(model))
             },
             onFailure = {
                 Log.e("Api", "getHomeFeed failed", it)
-                if (HomeCache.home == null) emit(Response.Error(it.message ?: "error"))
+                if (HomeCache.home == null) {
+                    val diskCached = OfflineCache.loadHomeFeed(context)
+                    if (diskCached != null) {
+                        HomeCache.home = diskCached
+                        emit(Response.Success(diskCached))
+                    } else {
+                        emit(Response.Error(it.message ?: "error"))
+                    }
+                }
             },
         )
     }
@@ -523,12 +570,20 @@ class Api @Inject constructor(
      * content rather than a best-effort name search.
      */
     suspend fun getPlaylistSongs(playlistId: String): Flow<Response<List<SongsModel>>> = flow {
-        emit(Response.Loading())
         if (playlistId.isBlank()) {
             emit(Response.Success(emptyList())); return@flow
         }
+        val cached = OfflineCache.loadPlaylist(context, playlistId)
+        if (cached != null) {
+            emit(Response.Success(cached))
+        } else {
+            emit(Response.Loading())
+        }
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            emit(Response.Error("Spotify not authenticated — set sp_dc cookie")); return@flow
+            if (cached == null) {
+                emit(Response.Error("Offline — could not load playlist"))
+            }
+            return@flow
         }
         Spotify.playlistTracks(playlistId, limit = 100).fold(
             onSuccess = { first ->
@@ -544,8 +599,9 @@ class Api @Inject constructor(
                     offset += page.items.size
                     emit(Response.Success(songs.toList()))
                 }
+                OfflineCache.savePlaylist(context, playlistId, songs)
             },
-            onFailure = { Log.e("Api", "getPlaylistSongs failed", it); emit(Response.Error(it.message ?: "error")) },
+            onFailure = { Log.e("Api", "getPlaylistSongs failed", it); if (cached == null) emit(Response.Error(it.message ?: "error")) },
         )
     }
 
@@ -574,9 +630,33 @@ class Api @Inject constructor(
      * GQL endpoint (not rate-limited). Process-cached for instant re-entry.
      */
     suspend fun getLibrary(): Flow<Response<List<com.music.spotui.data.entity.LibraryEntry>>> = flow {
-        HomeCache.library?.let { emit(Response.Success(it)) } ?: emit(Response.Loading())
+        // Pin "Liked Songs" first, exactly like the Spotify app.
+        val liked = com.music.spotui.data.entity.LibraryEntry(
+            spotifyId = LIKED_SONGS_ID,
+            name = "Liked Songs",
+            subtitle = "Playlist • Liked songs",
+            coverUri = "https://misc.scdn.co/liked-songs/liked-songs-640.png",
+            isPlaylist = true,
+        )
+        // Pin a "Downloaded" shortcut to the offline tracks, like Spotify's library.
+        val downloaded = com.music.spotui.data.entity.LibraryEntry(
+            spotifyId = DOWNLOADS_ID,
+            name = "Downloaded",
+            subtitle = "Available offline",
+            coverUri = "",
+            isPlaylist = true,
+        )
+        val defaultOfflineList = listOf(liked, downloaded)
+
+        val cached = HomeCache.library ?: OfflineCache.loadLibrary(context)
+        if (cached != null) {
+            HomeCache.library = cached
+            emit(Response.Success(cached))
+        } else {
+            emit(Response.Success(defaultOfflineList))
+        }
+
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            if (HomeCache.library == null) emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
             return@flow
         }
         val albums = fetchAllPages { offset -> Spotify.myAlbums(limit = 50, offset = offset) }.map { a ->
@@ -598,24 +678,9 @@ class Api @Inject constructor(
                 isPlaylist = true,
             )
         }
-        // Pin "Liked Songs" first, exactly like the Spotify app.
-        val liked = com.music.spotui.data.entity.LibraryEntry(
-            spotifyId = LIKED_SONGS_ID,
-            name = "Liked Songs",
-            subtitle = "Playlist • Liked songs",
-            coverUri = "https://misc.scdn.co/liked-songs/liked-songs-640.png",
-            isPlaylist = true,
-        )
-        // Pin a "Downloaded" shortcut to the offline tracks, like Spotify's library.
-        val downloaded = com.music.spotui.data.entity.LibraryEntry(
-            spotifyId = DOWNLOADS_ID,
-            name = "Downloaded",
-            subtitle = "Available offline",
-            coverUri = "",
-            isPlaylist = true,
-        )
         val merged = listOf(liked, downloaded) + playlists + albums
         HomeCache.library = merged
+        OfflineCache.saveLibrary(context, merged)
         emit(Response.Success(merged))
     }
 
@@ -639,9 +704,31 @@ class Api @Inject constructor(
 
     /** The user's Spotify "Liked Songs" (saved tracks) as playable songs. */
     suspend fun getLikedSongs(): Flow<Response<List<SongsModel>>> = flow {
-        emit(Response.Loading())
+        val cached = OfflineCache.loadLikedSongs(context)
+        if (cached != null) {
+            emit(Response.Success(cached))
+        } else {
+            val likedIds = com.music.spotui.data.preferences.getLikedSongIds(context)
+            val localLiked = com.music.spotui.data.preferences.getSongsByIds(
+                likedIds,
+                com.music.spotui.data.preferences.getDownloadedSongs(context) + com.music.spotui.data.preferences.getLocalSongs(context)
+            )
+            if (localLiked.isNotEmpty()) {
+                emit(Response.Success(localLiked))
+            } else {
+                emit(Response.Loading())
+            }
+        }
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            emit(Response.Error("Spotify not authenticated")); return@flow
+            if (cached == null) {
+                val likedIds = com.music.spotui.data.preferences.getLikedSongIds(context)
+                val localLiked = com.music.spotui.data.preferences.getSongsByIds(
+                    likedIds,
+                    com.music.spotui.data.preferences.getDownloadedSongs(context) + com.music.spotui.data.preferences.getLocalSongs(context)
+                )
+                emit(Response.Success(localLiked))
+            }
+            return@flow
         }
         Spotify.likedSongs(limit = 50).fold(
             onSuccess = { first ->
@@ -661,8 +748,9 @@ class Api @Inject constructor(
                     offset += page.items.size
                     emit(Response.Success(models.toList()))
                 }
+                OfflineCache.saveLikedSongs(context, models)
             },
-            onFailure = { Log.e("Api", "getLikedSongs failed", it); emit(Response.Error(it.message ?: "error")) },
+            onFailure = { Log.e("Api", "getLikedSongs failed", it); if (cached == null) emit(Response.Error(it.message ?: "error")) },
         )
     }
 

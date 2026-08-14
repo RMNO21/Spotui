@@ -216,11 +216,61 @@ object SongPlayer {
             return
         }
 
-        // Downloaded tracks ALWAYS play the local file — even with Spotify web
-        // playback on. (Web is now the default and used to run first, so a
-        // downloaded track streamed from Spotify instead of playing offline.)
+        // ── Local / Downloaded tracks fast-path (zero-network, instant play) ──
         val downloadedPath = com.music.spotui.data.preferences.downloadedPathForQuery(appContext, song)
-        if (downloadedPath == null && webPlayerEnabled &&
+        if (downloadedPath != null) {
+            currentSource = "Downloaded"
+            currentQuality = downloadedPath.substringAfterLast('.', "").uppercase()
+            val uri = android.net.Uri.fromFile(java.io.File(downloadedPath)).toString()
+            scope.launch {
+                withContext(Dispatchers.Main) {
+                    if (currentRequest != song) return@withContext
+                    ensurePlayer(appContext)
+                    player!!.setMediaItem(buildMediaItem(uri, streamMimeType(uri)))
+                    player!!.prepare()
+                    if (song == restoreQuery && restorePositionMs > 0) {
+                        player!!.seekTo(restorePositionMs)
+                    }
+                    restoreQuery = null
+                    player!!.playWhenReady = true
+                }
+                startPositionWatch()
+            }
+            return
+        }
+
+        if (song.startsWith("content://") || song.startsWith("file://")) {
+            currentSource = "Local file"
+            currentQuality = song.substringBefore('?').substringAfterLast('.', "")
+                .uppercase().takeIf { it.length in 2..5 }.orEmpty()
+            scope.launch {
+                withContext(Dispatchers.Main) {
+                    if (currentRequest != song) return@withContext
+                    ensurePlayer(appContext)
+                    player!!.setMediaItem(buildMediaItem(song, streamMimeType(song)))
+                    player!!.prepare()
+                    if (song == restoreQuery && restorePositionMs > 0) {
+                        player!!.seekTo(restorePositionMs)
+                    }
+                    restoreQuery = null
+                    player!!.playWhenReady = true
+                }
+                startPositionWatch()
+            }
+            return
+        }
+
+        // When offline, non-downloaded tracks cannot be streamed over the network
+        if (!com.music.spotui.data.api.NetworkMonitor.isOnline(appContext)) {
+            android.widget.Toast.makeText(
+                appContext,
+                "No internet connection. Download songs or import local files to play offline.",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+
+        if (webPlayerEnabled &&
             // Experimental: stream through Spotify's own web player (real Spotify audio,
             // no bypass) when enabled AND the device WebView has Widevine. Otherwise
             // fall through to the normal YouTube/FLAC engine so playback is never silent.
